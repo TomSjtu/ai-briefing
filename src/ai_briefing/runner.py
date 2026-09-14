@@ -6,17 +6,14 @@ import sys
 from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 import httpx
 
-from ai_briefing.config import load_feeds, load_settings
-from ai_briefing.extract import extract_content
-from ai_briefing.feeds import collect_day_entries
-from ai_briefing.push import push_to_wechat
-from ai_briefing.render import render_report
-
-BEIJING = ZoneInfo("Asia/Shanghai")
+from .config import load_feeds, load_settings
+from .extract import extract_content
+from .feeds import BEIJING, collect_day_entries
+from .push import push_to_wechat
+from .render import render_report
 
 
 def report_date(now: datetime | None = None) -> date:

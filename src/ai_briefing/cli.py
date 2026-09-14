@@ -5,7 +5,7 @@ import argparse
 import httpx
 from dotenv import load_dotenv
 
-from ai_briefing.runner import run
+from .runner import run
 
 
 def build_parser() -> argparse.ArgumentParser:

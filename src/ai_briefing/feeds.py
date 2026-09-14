@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 import feedparser
 import httpx
 
-from ai_briefing.config import Feed
+from .config import Feed
 
 BEIJING = ZoneInfo("Asia/Shanghai")
 USER_AGENT = "ai-briefing/0.1"

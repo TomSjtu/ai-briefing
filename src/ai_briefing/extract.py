@@ -7,7 +7,7 @@ from typing import Any
 
 import httpx
 
-from ai_briefing.config import Settings
+from .config import Settings
 
 SYSTEM_PROMPT = """你是一份只给读者自己看的中文 AI/科技行业早报编辑。根据用户消息里提供的当日条目，提取一篇叙事早报。
 
