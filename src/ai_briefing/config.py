@@ -27,7 +27,7 @@ def load_feeds(path: str | Path | None = None) -> tuple[Feed, ...]:
     feeds: list[Feed] = []
     seen_ids: set[str] = set()
     seen_urls: set[str] = set()
-    for index, raw in enumerate(raw_feeds):
+    for raw in raw_feeds:
         source_id = str(raw.get("id") or raw.get("source_id") or "").strip()
         name = str(raw.get("name") or "").strip()
         url = str(raw.get("url") or "").strip()

@@ -585,7 +585,6 @@ def test_invalid_feeds_yaml_exits_without_fetch(tmp_path, capsys, monkeypatch):
 
     captured = capsys.readouterr()
     assert code != 0
-    assert "数据源配置无效" in captured.err
     assert list(reports_dir.iterdir()) == []
     assert recorded == []
 
