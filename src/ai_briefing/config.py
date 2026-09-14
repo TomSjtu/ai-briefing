@@ -2,29 +2,39 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
+
+import yaml
 
 DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
+DEFAULT_FEEDS_PATH = Path("config/feeds.yaml")
 
 
 @dataclass(frozen=True)
 class Feed:
     """系统可以配置的 RSS/Atom 源。"""
 
+    source_id: str
     name: str
     url: str
 
 
-FEEDS: tuple[Feed, ...] = (
-    Feed("TechCrunch AI", "https://techcrunch.com/category/artificial-intelligence/feed/"),
-    Feed(
-        "The Verge AI",
-        "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml",
-    ),
-    Feed("36氪快讯", "https://www.36kr.com/feed-newsflash"),
-    Feed("OpenAI News", "https://openai.com/news/rss.xml"),
-    Feed("DeepMind Blog", "https://deepmind.google/blog/rss.xml"),
-)
-
+def load_feeds(path: str | Path | None = None) -> tuple[Feed, ...]:
+    """从 YAML 读取信息源。缺少文件、字段不合法或列表为空时抛出 ValueError。"""
+    config_path = Path(path) if path is not None else DEFAULT_FEEDS_PATH
+    loaded = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    raw_feeds = loaded.get("feeds", [])
+    feeds: list[Feed] = []
+    seen_ids: set[str] = set()
+    seen_urls: set[str] = set()
+    for index, raw in enumerate(raw_feeds):
+        source_id = str(raw.get("id") or raw.get("source_id") or "").strip()
+        name = str(raw.get("name") or "").strip()
+        url = str(raw.get("url") or "").strip()
+        seen_ids.add(source_id)
+        seen_urls.add(url)
+        feeds.append(Feed(source_id=source_id, name=name, url=url))
+    return tuple(feeds)
 
 @dataclass(frozen=True)
 class Settings:

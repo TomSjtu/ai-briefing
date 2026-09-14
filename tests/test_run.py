@@ -1,5 +1,6 @@
 import json
 from datetime import datetime
+from pathlib import Path
 from urllib.parse import parse_qsl
 from zoneinfo import ZoneInfo
 
@@ -110,7 +111,14 @@ FEED_URLS = (
     "https://www.36kr.com/feed-newsflash",
     "https://openai.com/news/rss.xml",
     "https://deepmind.google/blog/rss.xml",
+    "https://blog.google/innovation-and-ai/technology/ai/rss/",
+    "https://www.technologyreview.com/feed/",
+    "https://github.com/google-gemini/gemini-cli/releases.atom",
+    "https://github.com/openai/codex/releases.atom",
+    "https://github.com/anthropics/claude-code/releases.atom",
 )
+
+DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "config" / "feeds.yaml"
 
 IN_WINDOW = {
     "techcrunch": {
@@ -211,6 +219,11 @@ FIVE_FEED_BODIES = {
         [IN_WINDOW["openai"], OUT_OF_WINDOW["openai_history"]],
     ),
     FEED_URLS[4]: _rss("DeepMind Blog", [IN_WINDOW["deepmind"]]),
+    FEED_URLS[5]: _rss("Google AI", []),
+    FEED_URLS[6]: _rss("MIT Technology Review", []),
+    FEED_URLS[7]: _atom("Gemini CLI Releases", []),
+    FEED_URLS[8]: _atom("OpenAI Codex Releases", []),
+    FEED_URLS[9]: _atom("Claude Code Releases", []),
 }
 
 CREDENTIALS = {
@@ -289,7 +302,7 @@ def test_missing_openai_api_key_exits_without_briefing_or_push(tmp_path, capsys)
 
     captured = capsys.readouterr()
     assert code != 0
-    assert "缺模型凭证" in captured.err
+    assert "缺少模型凭证" in captured.err
     assert list(reports_dir.iterdir()) == []
     assert recorded == []
 
@@ -316,7 +329,7 @@ def test_missing_openai_model_exits_without_briefing_or_push(tmp_path, capsys):
 
     captured = capsys.readouterr()
     assert code != 0
-    assert "缺模型凭证" in captured.err
+    assert "缺少模型凭证" in captured.err
     assert list(reports_dir.iterdir()) == []
     assert recorded == []
 
@@ -377,7 +390,8 @@ def test_valid_extract_json_writes_variant_a_briefing_then_pushes_wechat(tmp_pat
         assert url in body["desp"]
 
 
-def test_five_feeds_send_beijing_day_window_entries_to_extract(tmp_path):
+def test_five_feeds_send_beijing_day_window_entries_to_extract(tmp_path, monkeypatch):
+    monkeypatch.setattr("ai_briefing.config.DEFAULT_FEEDS_PATH", DEFAULT_CONFIG)
     reports_dir = tmp_path / "reports"
     reports_dir.mkdir()
     recorded: list[httpx.Request] = []
@@ -433,7 +447,8 @@ def test_five_feeds_send_beijing_day_window_entries_to_extract(tmp_path):
     }
 
 
-def test_one_feed_failure_still_extracts_remaining_and_pushes(tmp_path):
+def test_one_feed_failure_still_extracts_remaining_and_pushes(tmp_path, monkeypatch):
+    monkeypatch.setattr("ai_briefing.config.DEFAULT_FEEDS_PATH", DEFAULT_CONFIG)
     reports_dir = tmp_path / "reports"
     reports_dir.mkdir()
     recorded: list[httpx.Request] = []
@@ -482,7 +497,8 @@ def test_one_feed_failure_still_extracts_remaining_and_pushes(tmp_path):
     assert len(pushes) == 1
 
 
-def test_all_feeds_fail_exits_without_extract_or_push(tmp_path, capsys):
+def test_all_feeds_fail_exits_without_extract_or_push(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr("ai_briefing.config.DEFAULT_FEEDS_PATH", DEFAULT_CONFIG)
     reports_dir = tmp_path / "reports"
     reports_dir.mkdir()
     recorded: list[httpx.Request] = []
@@ -511,7 +527,8 @@ def test_all_feeds_fail_exits_without_extract_or_push(tmp_path, capsys):
     assert {str(r.url) for r in recorded} == set(FEED_URLS)
 
 
-def test_html_challenge_pages_count_as_all_feeds_failed(tmp_path, capsys):
+def test_html_challenge_pages_count_as_all_feeds_failed(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr("ai_briefing.config.DEFAULT_FEEDS_PATH", DEFAULT_CONFIG)
     reports_dir = tmp_path / "reports"
     reports_dir.mkdir()
     recorded: list[httpx.Request] = []
@@ -543,6 +560,34 @@ def test_html_challenge_pages_count_as_all_feeds_failed(tmp_path, capsys):
     assert list(reports_dir.iterdir()) == []
     assert [r for r in recorded if r.url.path.endswith("/chat/completions")] == []
     assert [r for r in recorded if r.url.host == "sctapi.ftqq.com"] == []
+
+
+def test_invalid_feeds_yaml_exits_without_fetch(tmp_path, capsys, monkeypatch):
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir()
+    config_file = tmp_path / "feeds.yaml"
+    config_file.write_text("feeds: []\n", encoding="utf-8")
+    monkeypatch.setattr("ai_briefing.config.DEFAULT_FEEDS_PATH", config_file)
+    recorded: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        recorded.append(request)
+        return httpx.Response(200)
+
+    http = httpx.Client(transport=httpx.MockTransport(handler))
+
+    code = run(
+        reports_dir=reports_dir,
+        environ=CREDENTIALS,
+        http=http,
+        now=datetime(2026, 9, 7, 8, 0, tzinfo=BEIJING),
+    )
+
+    captured = capsys.readouterr()
+    assert code != 0
+    assert "数据源配置无效" in captured.err
+    assert list(reports_dir.iterdir()) == []
+    assert recorded == []
 
 
 def test_invalid_extract_json_exits_without_briefing_or_push(tmp_path, capsys):
@@ -801,7 +846,7 @@ def test_missing_sendkey_writes_briefing_then_exits(tmp_path, capsys):
     assert code != 0
     assert "推送失败" in captured.err
     assert "提取内容失败" not in captured.err
-    assert "缺模型凭证" not in captured.err
+    assert "缺少模型凭证" not in captured.err
     assert (reports_dir / "2026-09-07.md").read_text(encoding="utf-8") == VARIANT_A
     assert json.loads((reports_dir / "2026-09-07.json").read_text(encoding="utf-8")) == EXTRACT_JSON
     assert [r for r in recorded if r.url.host == "sctapi.ftqq.com"] == []

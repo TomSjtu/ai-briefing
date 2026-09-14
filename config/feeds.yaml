@@ -1,0 +1,32 @@
+# RSS / Atom 信息源。采集按列表顺序拉取；每条必须有 id、name、url。
+feeds:
+  - id: techcrunch-ai
+    name: TechCrunch AI
+    url: https://techcrunch.com/category/artificial-intelligence/feed/
+  - id: the-verge-ai
+    name: The Verge AI
+    url: https://www.theverge.com/rss/ai-artificial-intelligence/index.xml
+  - id: 36kr-newsflash
+    name: 36氪快讯
+    url: https://www.36kr.com/feed-newsflash
+  - id: openai-news
+    name: OpenAI News
+    url: https://openai.com/news/rss.xml
+  - id: deepmind-blog
+    name: DeepMind Blog
+    url: https://deepmind.google/blog/rss.xml
+  - id: google-ai
+    name: Google AI
+    url: https://blog.google/innovation-and-ai/technology/ai/rss/
+  - id: mit-technology-review
+    name: MIT Technology Review
+    url: https://www.technologyreview.com/feed/
+  - id: gemini-cli
+    name: Gemini CLI Releases
+    url: https://github.com/google-gemini/gemini-cli/releases.atom
+  - id: openai-codex
+    name: OpenAI Codex Releases
+    url: https://github.com/openai/codex/releases.atom
+  - id: claude-code
+    name: Claude Code Releases
+    url: https://github.com/anthropics/claude-code/releases.atom

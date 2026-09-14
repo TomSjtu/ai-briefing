@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
-from ai_briefing.config import load_settings
+from ai_briefing.config import load_feeds, load_settings
 from ai_briefing.extract import extract_content
 from ai_briefing.feeds import collect_day_entries
 from ai_briefing.push import push_to_wechat
@@ -39,12 +39,17 @@ def run(
     """生成当天早报并写入 Markdown/JSON；非 dry-run 时再推到微信，返回退出码。"""
     settings = load_settings(environ)
     if settings is None:
-        print("失败阶段：缺模型凭证", file=sys.stderr)
+        print("缺少模型凭证", file=sys.stderr)
         return 1
 
     day = report_date(now)
     if entries is None:
-        entries = collect_day_entries(http, day)
+        try:
+            resolved_feeds = load_feeds()
+        except (OSError, ValueError) as exc:
+            print(f"数据源配置无效：{exc}", file=sys.stderr)
+            return 1
+        entries = collect_day_entries(http, day, resolved_feeds)
         if entries is None:
             print("获取信息源失败", file=sys.stderr)
             return 1

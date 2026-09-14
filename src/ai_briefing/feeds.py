@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import date, datetime, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -7,7 +8,7 @@ from zoneinfo import ZoneInfo
 import feedparser
 import httpx
 
-from ai_briefing.config import FEEDS, Feed
+from ai_briefing.config import Feed
 
 BEIJING = ZoneInfo("Asia/Shanghai")
 USER_AGENT = "ai-briefing/0.1"
@@ -16,11 +17,12 @@ USER_AGENT = "ai-briefing/0.1"
 def collect_day_entries(
     http: httpx.Client,
     report_day: date,
+    feeds: Sequence[Feed],
 ) -> list[dict[str, str]] | None:
     """拉取各源，只返回落在报告日（北京时间）内的条目。全部获取失败返回 None。"""
     collected: list[dict[str, str]] = []
     failed = 0
-    for feed in FEEDS:
+    for feed in feeds:
         try:
             response = http.get(
                 feed.url, headers={"User-Agent": USER_AGENT}, timeout=15.0
@@ -31,7 +33,7 @@ def collect_day_entries(
             failed += 1
             continue
         collected.extend(windowed)
-    if failed == len(FEEDS):
+    if failed == len(feeds):
         return None
     return collected
 
