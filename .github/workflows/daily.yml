@@ -1,0 +1,36 @@
+name: Daily briefing
+
+on:
+  schedule:
+    # 每天北京时间 09:00（UTC 01:00）
+    - cron: "0 1 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-briefing
+  cancel-in-progress: false
+
+jobs:
+  briefing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # GitHub 托管 runner 在海外，不用项目里的清华 PyPI 源
+      UV_DEFAULT_INDEX: https://pypi.org/simple
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+      OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+      SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.11"
+          enable-cache: true
+      - name: Install
+        run: uv sync --frozen
+      - name: Generate and push briefing
+        run: uv run ai-briefing
