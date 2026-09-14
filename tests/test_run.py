@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
+from ai_briefing.cli import main as cli_main
 from ai_briefing.runner import run
 
 BEIJING = ZoneInfo("Asia/Shanghai")
@@ -680,6 +681,92 @@ def test_placeholder_sendkey_keeps_briefing_and_exits(tmp_path, capsys):
     assert (reports_dir / "2026-09-07.md").read_text(encoding="utf-8") == VARIANT_A
     assert json.loads((reports_dir / "2026-09-07.json").read_text(encoding="utf-8")) == EXTRACT_JSON
     assert [r for r in recorded if r.url.host == "sctapi.ftqq.com"] == []
+
+
+def test_dry_run_writes_md_and_json_without_pushing(tmp_path):
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir()
+    recorded: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        recorded.append(request)
+        if request.url.path.endswith("/chat/completions"):
+            return _extract_ok(request)
+        if request.url.host == "sctapi.ftqq.com":
+            return _push_ok(request)
+        return httpx.Response(404)
+
+    http = httpx.Client(transport=httpx.MockTransport(handler))
+    environ = {
+        "OPENAI_API_KEY": CREDENTIALS["OPENAI_API_KEY"],
+        "OPENAI_BASE_URL": CREDENTIALS["OPENAI_BASE_URL"],
+        "OPENAI_MODEL": CREDENTIALS["OPENAI_MODEL"],
+    }
+
+    code = run(
+        reports_dir=reports_dir,
+        environ=environ,
+        http=http,
+        now=datetime(2026, 9, 7, 8, 0, tzinfo=BEIJING),
+        entries=ENTRIES,
+        dry_run=True,
+    )
+
+    assert code == 0
+    markdown = (reports_dir / "2026-09-07.md").read_text(encoding="utf-8")
+    sidecar = json.loads((reports_dir / "2026-09-07.json").read_text(encoding="utf-8"))
+    assert markdown == VARIANT_A
+    assert sidecar == EXTRACT_JSON
+    assert [r for r in recorded if r.url.host == "sctapi.ftqq.com"] == []
+    assert [r for r in recorded if r.url.path.endswith("/chat/completions")]
+
+
+def test_dry_run_skips_push_even_with_sendkey(tmp_path):
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir()
+    recorded: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        recorded.append(request)
+        if request.url.path.endswith("/chat/completions"):
+            return _extract_ok(request)
+        if request.url.host == "sctapi.ftqq.com":
+            return _push_ok(request)
+        return httpx.Response(404)
+
+    http = httpx.Client(transport=httpx.MockTransport(handler))
+
+    code = run(
+        reports_dir=reports_dir,
+        environ=CREDENTIALS,
+        http=http,
+        now=datetime(2026, 9, 7, 8, 0, tzinfo=BEIJING),
+        entries=ENTRIES,
+        dry_run=True,
+    )
+
+    assert code == 0
+    assert (reports_dir / "2026-09-07.md").read_text(encoding="utf-8") == VARIANT_A
+    assert json.loads((reports_dir / "2026-09-07.json").read_text(encoding="utf-8")) == EXTRACT_JSON
+    assert [r for r in recorded if r.url.host == "sctapi.ftqq.com"] == []
+
+
+def test_cli_dry_run_passes_flag_to_runner(monkeypatch):
+    seen: dict = {}
+
+    def fake_run(*, http, dry_run=False, **_kwargs):
+        seen["dry_run"] = dry_run
+        seen["http"] = http
+        return 0
+
+    monkeypatch.setattr("ai_briefing.cli.run", fake_run)
+    monkeypatch.setattr("ai_briefing.cli.load_dotenv", lambda: None)
+
+    assert cli_main(["--dry-run"]) == 0
+    assert seen["dry_run"] is True
+    assert isinstance(seen["http"], httpx.Client)
+    assert cli_main([]) == 0
+    assert seen["dry_run"] is False
 
 
 def test_missing_sendkey_writes_briefing_then_exits(tmp_path, capsys):

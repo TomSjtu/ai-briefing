@@ -34,8 +34,9 @@ def run(
     environ: Mapping[str, str] = os.environ,
     now: datetime | None = None,
     entries: Sequence[Mapping[str, str]] | None = None,
+    dry_run: bool = False,
 ) -> int:
-    """生成当天早报、写入磁盘并推到微信，返回退出码。"""
+    """生成当天早报并写入 Markdown/JSON；非 dry-run 时再推到微信，返回退出码。"""
     settings = load_settings(environ)
     if settings is None:
         print("失败阶段：缺模型凭证", file=sys.stderr)
@@ -58,6 +59,9 @@ def run(
         json.dumps(briefing, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+    if dry_run:
+        # 设置 dry_run 不要推送
+        return 0
     if not push_to_wechat(
         http, settings.serverchan_sendkey, briefing["card_title"], markdown
     ):
