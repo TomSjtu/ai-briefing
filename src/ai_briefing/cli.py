@@ -24,5 +24,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     load_dotenv()
     args = build_parser().parse_args(argv)
-    with httpx.Client(timeout=httpx.Timeout(180.0, connect=10.0)) as client:
+    with httpx.Client(
+        timeout=httpx.Timeout(180.0, connect=10.0),
+        follow_redirects=True,
+    ) as client:
         return run(http=client, dry_run=args.dry_run)

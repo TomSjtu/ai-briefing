@@ -25,7 +25,10 @@ def collect_day_entries(
     for feed in feeds:
         try:
             response = http.get(
-                feed.url, headers={"User-Agent": USER_AGENT}, timeout=15.0
+                feed.url,
+                headers={"User-Agent": USER_AGENT},
+                timeout=15.0,
+                follow_redirects=True,
             )
             response.raise_for_status()
             windowed = _window_entries(feed, response.content, report_day)

@@ -447,6 +447,47 @@ def test_five_feeds_send_beijing_day_window_entries_to_extract(tmp_path, monkeyp
     }
 
 
+def test_feed_http_redirect_still_collects_window_entries(tmp_path, monkeypatch):
+    monkeypatch.setattr("ai_briefing.config.DEFAULT_FEEDS_PATH", DEFAULT_CONFIG)
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir()
+    recorded: list[httpx.Request] = []
+    moved = FEED_URLS[0] + "moved/"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        recorded.append(request)
+        url = str(request.url)
+        if url == FEED_URLS[0]:
+            return httpx.Response(301, headers={"location": moved})
+        if url == moved:
+            return httpx.Response(200, text=FIVE_FEED_BODIES[FEED_URLS[0]])
+        if url in FIVE_FEED_BODIES:
+            return httpx.Response(200, text=FIVE_FEED_BODIES[url])
+        if request.url.path.endswith("/chat/completions"):
+            return _extract_ok_with_input_urls(request)
+        if request.url.host == "sctapi.ftqq.com":
+            return _push_ok(request)
+        return httpx.Response(404)
+
+    http = httpx.Client(transport=httpx.MockTransport(handler))
+
+    code = run(
+        reports_dir=reports_dir,
+        environ=CREDENTIALS,
+        http=http,
+        now=datetime(2026, 9, 7, 8, 0, tzinfo=BEIJING),
+    )
+
+    assert code == 0
+    requested = [str(r.url) for r in recorded if r.method == "GET"]
+    assert requested[0] == FEED_URLS[0]
+    assert moved in requested
+    extracts = [r for r in recorded if r.url.path.endswith("/chat/completions")]
+    assert len(extracts) == 1
+    user = json.loads(_fields(extracts[0])["messages"][1]["content"])
+    assert IN_WINDOW["techcrunch"]["url"] in {item["url"] for item in user["items"]}
+
+
 def test_one_feed_failure_still_extracts_remaining_and_pushes(tmp_path, monkeypatch):
     monkeypatch.setattr("ai_briefing.config.DEFAULT_FEEDS_PATH", DEFAULT_CONFIG)
     reports_dir = tmp_path / "reports"
@@ -809,6 +850,7 @@ def test_cli_dry_run_passes_flag_to_runner(monkeypatch):
     assert cli_main(["--dry-run"]) == 0
     assert seen["dry_run"] is True
     assert isinstance(seen["http"], httpx.Client)
+    assert seen["http"].follow_redirects is True
     assert cli_main([]) == 0
     assert seen["dry_run"] is False
 
