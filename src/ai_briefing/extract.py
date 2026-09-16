@@ -33,13 +33,11 @@ JSON 形状：
       "url": "string",
       "published": "string"
     }
-  ],
-  "closing": "string"
+  ]
 }
 
 `lead`：一段话，说明今天是哪类日子、选了几条、缺了什么。
 `why`：一小段，接在标题后面，不是标题的重复。
-`closing`：可空字符串。用于「国内无单独信号」一类收束。
 `source` 用输入里的来源名。`published` 用输入里的日期，没有则空字符串。
 """
 
@@ -129,4 +127,5 @@ def _accepted_briefing(
     for item in items:
         if not isinstance(item, dict) or item.get("url") not in allowed_urls:
             return None
+    briefing.pop("closing", None)
     return briefing

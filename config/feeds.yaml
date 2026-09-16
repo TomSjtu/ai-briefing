@@ -6,9 +6,6 @@ feeds:
   - id: the-verge-ai
     name: The Verge AI
     url: https://www.theverge.com/rss/ai-artificial-intelligence/index.xml
-  - id: 36kr-newsflash
-    name: 36氪快讯
-    url: https://www.36kr.com/feed-newsflash
   - id: openai-news
     name: OpenAI News
     url: https://openai.com/news/rss.xml

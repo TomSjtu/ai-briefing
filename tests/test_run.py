@@ -40,13 +40,6 @@ ENTRIES = [
         "url": "https://deepmind.google/blog/example-weathernext",
         "published": "2026-09-03",
     },
-    {
-        "source": "36氪",
-        "title": "某地产项目开盘去化率创新高",
-        "summary": "与 AI/科技无关的快讯。",
-        "url": "https://www.36kr.com/example-real-estate",
-        "published": "2026-09-07",
-    },
 ]
 
 EXTRACT_JSON = {
@@ -82,7 +75,6 @@ EXTRACT_JSON = {
             "published": "2026-09-03",
         },
     ],
-    "closing": "国内快讯今天没有单独能抬起来的 AI 政策或大额融资。",
 }
 
 VARIANT_A = """# AI 科技早报 · 9 月 7 日
@@ -100,15 +92,12 @@ VARIANT_A = """# AI 科技早报 · 9 月 7 日
 
 **DeepMind 更新 WeatherNext 3。** 气象模型是少数能直接接到政府与产业合同的 AI 产品线，比聊天模型更接近「行业」。
 来源：DeepMind · [原文](https://deepmind.google/blog/example-weathernext)
-
-国内快讯今天没有单独能抬起来的 AI 政策或大额融资。
 """
 
 
 FEED_URLS = (
     "https://techcrunch.com/category/artificial-intelligence/feed/",
     "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml",
-    "https://www.36kr.com/feed-newsflash",
     "https://openai.com/news/rss.xml",
     "https://deepmind.google/blog/rss.xml",
     "https://blog.google/innovation-and-ai/technology/ai/rss/",
@@ -132,12 +121,6 @@ IN_WINDOW = {
         "summary": "The company disclosed that wiki content was pulled into an internal accident review.",
         "url": "https://www.theverge.com/example-wiki-incident",
         "published": "2026-09-07T08:00:00Z",
-    },
-    "36kr": {
-        "title": "某地产项目开盘去化率创新高",
-        "summary": "与 AI/科技无关的快讯。",
-        "url": "https://www.36kr.com/example-real-estate",
-        "pubDate": "Mon, 07 Sep 2026 09:00:00 +0800",
     },
     "openai": {
         "title": "OpenAI partners with Ukrainian newsrooms",
@@ -213,17 +196,16 @@ FIVE_FEED_BODIES = {
         [IN_WINDOW["techcrunch"], OUT_OF_WINDOW["techcrunch_utc_still_sep6_beijing"]],
     ),
     FEED_URLS[1]: _atom("The Verge AI", [IN_WINDOW["verge"]]),
-    FEED_URLS[2]: _rss("36氪快讯", [IN_WINDOW["36kr"]]),
-    FEED_URLS[3]: _rss(
+    FEED_URLS[2]: _rss(
         "OpenAI News",
         [IN_WINDOW["openai"], OUT_OF_WINDOW["openai_history"]],
     ),
-    FEED_URLS[4]: _rss("DeepMind Blog", [IN_WINDOW["deepmind"]]),
-    FEED_URLS[5]: _rss("Google AI", []),
-    FEED_URLS[6]: _rss("MIT Technology Review", []),
-    FEED_URLS[7]: _atom("Gemini CLI Releases", []),
-    FEED_URLS[8]: _atom("OpenAI Codex Releases", []),
-    FEED_URLS[9]: _atom("Claude Code Releases", []),
+    FEED_URLS[3]: _rss("DeepMind Blog", [IN_WINDOW["deepmind"]]),
+    FEED_URLS[4]: _rss("Google AI", []),
+    FEED_URLS[5]: _rss("MIT Technology Review", []),
+    FEED_URLS[6]: _atom("Gemini CLI Releases", []),
+    FEED_URLS[7]: _atom("OpenAI Codex Releases", []),
+    FEED_URLS[8]: _atom("Claude Code Releases", []),
 }
 
 CREDENTIALS = {
@@ -425,15 +407,13 @@ def test_five_feeds_send_beijing_day_window_entries_to_extract(tmp_path, monkeyp
     assert [item["url"] for item in user["items"]] == [
         IN_WINDOW["techcrunch"]["url"],
         IN_WINDOW["verge"]["url"],
-        IN_WINDOW["36kr"]["url"],
         IN_WINDOW["openai"]["url"],
         IN_WINDOW["deepmind"]["url"],
     ]
     assert user["items"][0]["source"] == "TechCrunch AI"
     assert user["items"][1]["source"] == "The Verge AI"
-    assert user["items"][2]["source"] == "36氪快讯"
-    assert user["items"][3]["source"] == "OpenAI News"
-    assert user["items"][4]["source"] == "DeepMind Blog"
+    assert user["items"][2]["source"] == "OpenAI News"
+    assert user["items"][3]["source"] == "DeepMind Blog"
     assert all(item["published"] == "2026-09-07" for item in user["items"])
     assert OUT_OF_WINDOW["openai_history"]["url"] not in {
         item["url"] for item in user["items"]
@@ -490,7 +470,7 @@ def test_one_feed_failure_still_extracts_remaining_and_pushes(tmp_path, monkeypa
     reports_dir.mkdir()
     recorded: list[httpx.Request] = []
     files_at_push: list[str] = []
-    dead = FEED_URLS[3]
+    dead = FEED_URLS[2]
 
     def handler(request: httpx.Request) -> httpx.Response:
         recorded.append(request)
@@ -524,7 +504,6 @@ def test_one_feed_failure_still_extracts_remaining_and_pushes(tmp_path, monkeypa
     assert urls == [
         IN_WINDOW["techcrunch"]["url"],
         IN_WINDOW["verge"]["url"],
-        IN_WINDOW["36kr"]["url"],
         IN_WINDOW["deepmind"]["url"],
     ]
     assert (reports_dir / "2026-09-07.md").is_file()

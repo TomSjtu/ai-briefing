@@ -16,7 +16,4 @@ def render_report(report_date: date, briefing: dict[str, Any]) -> str:
         lines.append(f"**{item['headline']}。** {item['why']}")
         lines.append(f"来源：{item['source']} · [原文]({item['url']})")
         lines.append("")
-    closing = briefing.get("closing") or ""
-    if closing:
-        lines.append(closing)
     return "\n".join(lines).rstrip() + "\n"
