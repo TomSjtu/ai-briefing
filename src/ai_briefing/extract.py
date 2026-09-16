@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from collections.abc import Mapping, Sequence
 from datetime import date
 from typing import Any
@@ -64,6 +65,11 @@ def extract_content(
             for item in entries
         ],
     }
+    print(
+        f"[提取] 请求 {settings.openai_model}，当日条目 {len(entries)} 条",
+        file=sys.stderr,
+    )
+    content: str | None = None
     try:
         response = http.post(
             url,
@@ -82,10 +88,32 @@ def extract_content(
         )
         response.raise_for_status()
         payload = response.json()
-        briefing = json.loads(payload["choices"][0]["message"]["content"])
-        return _accepted_briefing(briefing, entries)
-    except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError):
+        content = payload["choices"][0]["message"]["content"]
+        if not isinstance(content, str):
+            print(
+                f"[提取] message.content 不是字符串：{type(content).__name__}",
+                file=sys.stderr,
+            )
+            return None
+        briefing = _loads_model_json(content)
+        accepted = _accepted_briefing(briefing, entries)
+        if accepted is not None:
+            print(f"[提取] 完成，早报 {len(accepted['items'])} 条", file=sys.stderr)
+        return accepted
+    except (ValueError, KeyError, IndexError, TypeError, AttributeError) as exc:
+        print(f"[提取] 响应无法解析：{type(exc).__name__}: {exc}", file=sys.stderr)
         return None
+
+
+def _loads_model_json(raw: str) -> Any:
+    """解析模型输出的 JSON。允许字符串内的裸换行等控制字符。"""
+    text = raw.strip()
+    if text.startswith("```"):
+        lines = text.splitlines()[1:]
+        if lines and lines[-1].strip().startswith("```"):
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+    return json.loads(text, strict=False)
 
 
 def _accepted_briefing(

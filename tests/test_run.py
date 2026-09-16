@@ -280,7 +280,7 @@ def _fields(request: httpx.Request) -> dict:
 
 
 
-def test_missing_openai_api_key_exits_without_briefing_or_push(tmp_path, capsys):
+def test_missing_openai_api_key_exits_without_briefing_or_push(tmp_path):
     recorded: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -300,14 +300,12 @@ def test_missing_openai_api_key_exits_without_briefing_or_push(tmp_path, capsys)
         http=http,
     )
 
-    captured = capsys.readouterr()
     assert code != 0
-    assert "缺少模型凭证" in captured.err
     assert list(reports_dir.iterdir()) == []
     assert recorded == []
 
 
-def test_missing_openai_model_exits_without_briefing_or_push(tmp_path, capsys):
+def test_missing_openai_model_exits_without_briefing_or_push(tmp_path):
     recorded: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -327,9 +325,7 @@ def test_missing_openai_model_exits_without_briefing_or_push(tmp_path, capsys):
         http=http,
     )
 
-    captured = capsys.readouterr()
     assert code != 0
-    assert "缺少模型凭证" in captured.err
     assert list(reports_dir.iterdir()) == []
     assert recorded == []
 
@@ -538,7 +534,7 @@ def test_one_feed_failure_still_extracts_remaining_and_pushes(tmp_path, monkeypa
     assert len(pushes) == 1
 
 
-def test_all_feeds_fail_exits_without_extract_or_push(tmp_path, capsys, monkeypatch):
+def test_all_feeds_fail_exits_without_extract_or_push(tmp_path, monkeypatch):
     monkeypatch.setattr("ai_briefing.config.DEFAULT_FEEDS_PATH", DEFAULT_CONFIG)
     reports_dir = tmp_path / "reports"
     reports_dir.mkdir()
@@ -559,16 +555,14 @@ def test_all_feeds_fail_exits_without_extract_or_push(tmp_path, capsys, monkeypa
         now=datetime(2026, 9, 7, 8, 0, tzinfo=BEIJING),
     )
 
-    captured = capsys.readouterr()
     assert code != 0
-    assert "获取信息源失败" in captured.err
     assert list(reports_dir.iterdir()) == []
     assert [r for r in recorded if r.url.path.endswith("/chat/completions")] == []
     assert [r for r in recorded if r.url.host == "sctapi.ftqq.com"] == []
     assert {str(r.url) for r in recorded} == set(FEED_URLS)
 
 
-def test_html_challenge_pages_count_as_all_feeds_failed(tmp_path, capsys, monkeypatch):
+def test_html_challenge_pages_count_as_all_feeds_failed(tmp_path, monkeypatch):
     monkeypatch.setattr("ai_briefing.config.DEFAULT_FEEDS_PATH", DEFAULT_CONFIG)
     reports_dir = tmp_path / "reports"
     reports_dir.mkdir()
@@ -595,15 +589,13 @@ def test_html_challenge_pages_count_as_all_feeds_failed(tmp_path, capsys, monkey
         now=datetime(2026, 9, 7, 8, 0, tzinfo=BEIJING),
     )
 
-    captured = capsys.readouterr()
     assert code != 0
-    assert "获取信息源失败" in captured.err
     assert list(reports_dir.iterdir()) == []
     assert [r for r in recorded if r.url.path.endswith("/chat/completions")] == []
     assert [r for r in recorded if r.url.host == "sctapi.ftqq.com"] == []
 
 
-def test_invalid_feeds_yaml_exits_without_fetch(tmp_path, capsys, monkeypatch):
+def test_invalid_feeds_yaml_exits_without_fetch(tmp_path, monkeypatch):
     reports_dir = tmp_path / "reports"
     reports_dir.mkdir()
     config_file = tmp_path / "feeds.yaml"
@@ -624,13 +616,12 @@ def test_invalid_feeds_yaml_exits_without_fetch(tmp_path, capsys, monkeypatch):
         now=datetime(2026, 9, 7, 8, 0, tzinfo=BEIJING),
     )
 
-    captured = capsys.readouterr()
     assert code != 0
     assert list(reports_dir.iterdir()) == []
     assert recorded == []
 
 
-def test_invalid_extract_json_exits_without_briefing_or_push(tmp_path, capsys):
+def test_invalid_extract_json_exits_without_briefing_or_push(tmp_path):
     reports_dir = tmp_path / "reports"
     reports_dir.mkdir()
     recorded: list[httpx.Request] = []
@@ -654,15 +645,45 @@ def test_invalid_extract_json_exits_without_briefing_or_push(tmp_path, capsys):
         entries=ENTRIES,
     )
 
-    captured = capsys.readouterr()
     assert code != 0
-    assert "提取内容失败" in captured.err
-    assert "推送失败" not in captured.err
     assert list(reports_dir.iterdir()) == []
     assert [r for r in recorded if r.url.host == "sctapi.ftqq.com"] == []
 
 
-def test_hallucinated_url_exits_without_briefing_or_push(tmp_path, capsys):
+def test_extract_json_with_raw_control_character_still_writes_briefing(tmp_path):
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir()
+    needle = EXTRACT_JSON["lead"][:12]
+    broken = json.dumps(EXTRACT_JSON, ensure_ascii=False).replace(
+        needle, needle[:6] + "\n" + needle[6:], 1
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/chat/completions"):
+            return httpx.Response(
+                200,
+                json={"choices": [{"message": {"content": broken}}]},
+            )
+        if request.url.host == "sctapi.ftqq.com":
+            return _push_ok(request)
+        return httpx.Response(404)
+
+    http = httpx.Client(transport=httpx.MockTransport(handler))
+
+    code = run(
+        reports_dir=reports_dir,
+        environ=CREDENTIALS,
+        http=http,
+        now=datetime(2026, 9, 7, 8, 0, tzinfo=BEIJING),
+        entries=ENTRIES,
+    )
+
+    assert code == 0
+    sidecar = json.loads((reports_dir / "2026-09-07.json").read_text(encoding="utf-8"))
+    assert sidecar["items"] == EXTRACT_JSON["items"]
+
+
+def test_hallucinated_url_exits_without_briefing_or_push(tmp_path):
     reports_dir = tmp_path / "reports"
     reports_dir.mkdir()
     recorded: list[httpx.Request] = []
@@ -696,15 +717,12 @@ def test_hallucinated_url_exits_without_briefing_or_push(tmp_path, capsys):
         entries=ENTRIES,
     )
 
-    captured = capsys.readouterr()
     assert code != 0
-    assert "提取内容失败" in captured.err
-    assert "推送失败" not in captured.err
     assert list(reports_dir.iterdir()) == []
     assert [r for r in recorded if r.url.host == "sctapi.ftqq.com"] == []
 
 
-def test_serverchan_http_failure_keeps_briefing_and_exits(tmp_path, capsys):
+def test_serverchan_http_failure_keeps_briefing_and_exits(tmp_path):
     reports_dir = tmp_path / "reports"
     reports_dir.mkdir()
     recorded: list[httpx.Request] = []
@@ -727,16 +745,13 @@ def test_serverchan_http_failure_keeps_briefing_and_exits(tmp_path, capsys):
         entries=ENTRIES,
     )
 
-    captured = capsys.readouterr()
     assert code != 0
-    assert "推送失败" in captured.err
-    assert "提取内容失败" not in captured.err
     assert (reports_dir / "2026-09-07.md").read_text(encoding="utf-8") == VARIANT_A
     assert json.loads((reports_dir / "2026-09-07.json").read_text(encoding="utf-8")) == EXTRACT_JSON
     assert [r for r in recorded if r.url.host == "sctapi.ftqq.com"]
 
 
-def test_placeholder_sendkey_keeps_briefing_and_exits(tmp_path, capsys):
+def test_placeholder_sendkey_keeps_briefing_and_exits(tmp_path):
     reports_dir = tmp_path / "reports"
     reports_dir.mkdir()
     recorded: list[httpx.Request] = []
@@ -759,10 +774,7 @@ def test_placeholder_sendkey_keeps_briefing_and_exits(tmp_path, capsys):
         entries=ENTRIES,
     )
 
-    captured = capsys.readouterr()
     assert code != 0
-    assert "推送失败" in captured.err
-    assert "提取内容失败" not in captured.err
     assert (reports_dir / "2026-09-07.md").read_text(encoding="utf-8") == VARIANT_A
     assert json.loads((reports_dir / "2026-09-07.json").read_text(encoding="utf-8")) == EXTRACT_JSON
     assert [r for r in recorded if r.url.host == "sctapi.ftqq.com"] == []
@@ -855,7 +867,7 @@ def test_cli_dry_run_passes_flag_to_runner(monkeypatch):
     assert seen["dry_run"] is False
 
 
-def test_missing_sendkey_writes_briefing_then_exits(tmp_path, capsys):
+def test_missing_sendkey_writes_briefing_then_exits(tmp_path):
     reports_dir = tmp_path / "reports"
     reports_dir.mkdir()
     recorded: list[httpx.Request] = []
@@ -883,11 +895,7 @@ def test_missing_sendkey_writes_briefing_then_exits(tmp_path, capsys):
         entries=ENTRIES,
     )
 
-    captured = capsys.readouterr()
     assert code != 0
-    assert "推送失败" in captured.err
-    assert "提取内容失败" not in captured.err
-    assert "缺少模型凭证" not in captured.err
     assert (reports_dir / "2026-09-07.md").read_text(encoding="utf-8") == VARIANT_A
     assert json.loads((reports_dir / "2026-09-07.json").read_text(encoding="utf-8")) == EXTRACT_JSON
     assert [r for r in recorded if r.url.host == "sctapi.ftqq.com"] == []

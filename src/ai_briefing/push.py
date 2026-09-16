@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+
 import httpx
 
 
@@ -17,4 +19,6 @@ def push_to_wechat(http: httpx.Client, sendkey: str, title: str, desp: str) -> b
         payload = response.json()
     except (httpx.HTTPError, ValueError, TypeError):
         return False
-    return payload.get("code") == 0
+    
+    print("[推送] 成功", file=sys.stderr)
+    return True

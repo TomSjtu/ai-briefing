@@ -40,12 +40,17 @@ def run(
         return 1
 
     day = report_date(now)
+    print(
+        f"[早报] 开始 报告日={day.isoformat()} 模型={settings.openai_model}",
+        file=sys.stderr,
+    )
     if entries is None:
         try:
             resolved_feeds = load_feeds()
         except (OSError, ValueError) as exc:
             print(f"数据源配置无效：{exc}", file=sys.stderr)
             return 1
+        print(f"[早报] 已加载 {len(resolved_feeds)} 个信息源", file=sys.stderr)
         entries = collect_day_entries(http, day, resolved_feeds)
         if entries is None:
             print("获取信息源失败", file=sys.stderr)
@@ -56,17 +61,21 @@ def run(
         return 1
     markdown = render_report(day, briefing)
     reports_dir.mkdir(parents=True, exist_ok=True)
-    (reports_dir / f"{day.isoformat()}.md").write_text(markdown, encoding="utf-8")
-    (reports_dir / f"{day.isoformat()}.json").write_text(
+    md_path = reports_dir / f"{day.isoformat()}.md"
+    json_path = reports_dir / f"{day.isoformat()}.json"
+    md_path.write_text(markdown, encoding="utf-8")
+    json_path.write_text(
         json.dumps(briefing, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+    print(f"[早报] 已写入 {md_path} 与 {json_path}", file=sys.stderr)
     if dry_run:
-        # 设置 dry_run 不要推送
+        print("[早报] 跳过推送", file=sys.stderr)
         return 0
     if not push_to_wechat(
         http, settings.serverchan_sendkey, briefing["card_title"], markdown
     ):
         print("推送失败", file=sys.stderr)
         return 1
+    print("[早报] 完成", file=sys.stderr)
     return 0

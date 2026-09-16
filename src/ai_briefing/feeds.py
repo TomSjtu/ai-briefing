@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from collections.abc import Sequence
 from datetime import date, datetime, timezone
 from typing import Any
@@ -22,6 +23,7 @@ def collect_day_entries(
     """拉取各源，只返回落在报告日（北京时间）内的条目。全部获取失败返回 None。"""
     collected: list[dict[str, str]] = []
     failed = 0
+    print(f"[采集] 开始，共 {len(feeds)} 个源，日期 {report_day.isoformat()}", file=sys.stderr)
     for feed in feeds:
         try:
             response = http.get(
@@ -36,6 +38,10 @@ def collect_day_entries(
             failed += 1
             continue
         collected.extend(windowed)
+    print(
+        f"[采集] 合计当日 {len(collected)} 条，{len(feeds) - failed}/{len(feeds)} 源成功",
+        file=sys.stderr,
+    )
     if failed == len(feeds):
         return None
     return collected
