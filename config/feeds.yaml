@@ -27,3 +27,21 @@ feeds:
   - id: claude-code
     name: Claude Code Releases
     url: https://github.com/anthropics/claude-code/releases.atom
+  - id: huggingface-blog
+    name: Hugging Face Blog
+    url: https://huggingface.co/blog/feed.xml
+  - id: simon-willison
+    name: Simon Willison
+    url: https://simonwillison.net/atom/everything/
+  - id: google-research
+    name: Google Research
+    url: https://research.google/blog/rss/
+  - id: nvidia-technical-blog
+    name: NVIDIA Technical Blog
+    url: https://developer.nvidia.com/blog/feed/
+  - id: github-blog
+    name: GitHub Blog
+    url: https://github.blog/feed/
+  - id: interconnects
+    name: Interconnects
+    url: https://www.interconnects.ai/feed
