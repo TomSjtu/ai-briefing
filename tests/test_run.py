@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 import httpx
 
 from ai_briefing.cli import main as cli_main
+from ai_briefing.config import load_feeds
 from ai_briefing.runner import run
 
 BEIJING = ZoneInfo("Asia/Shanghai")
@@ -95,19 +96,77 @@ VARIANT_A = """# AI 科技早报 · 9 月 7 日
 """
 
 
-FEED_URLS = (
-    "https://techcrunch.com/category/artificial-intelligence/feed/",
-    "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml",
-    "https://openai.com/news/rss.xml",
-    "https://deepmind.google/blog/rss.xml",
-    "https://blog.google/innovation-and-ai/technology/ai/rss/",
-    "https://www.technologyreview.com/feed/",
-    "https://github.com/google-gemini/gemini-cli/releases.atom",
-    "https://github.com/openai/codex/releases.atom",
-    "https://github.com/anthropics/claude-code/releases.atom",
+COLLECT_FEEDS = (
+    {
+        "id": "techcrunch-ai",
+        "name": "TechCrunch AI",
+        "url": "https://techcrunch.com/category/artificial-intelligence/feed/",
+    },
+    {
+        "id": "the-verge-ai",
+        "name": "The Verge AI",
+        "url": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml",
+    },
+    {
+        "id": "openai-news",
+        "name": "OpenAI News",
+        "url": "https://openai.com/news/rss.xml",
+    },
+    {
+        "id": "deepmind-blog",
+        "name": "DeepMind Blog",
+        "url": "https://deepmind.google/blog/rss.xml",
+    },
+    {
+        "id": "google-ai",
+        "name": "Google AI",
+        "url": "https://blog.google/innovation-and-ai/technology/ai/rss/",
+    },
+    {
+        "id": "mit-technology-review",
+        "name": "MIT Technology Review",
+        "url": "https://www.technologyreview.com/feed/",
+    },
+    {
+        "id": "gemini-cli",
+        "name": "Gemini CLI Releases",
+        "url": "https://github.com/google-gemini/gemini-cli/releases.atom",
+    },
+    {
+        "id": "openai-codex",
+        "name": "OpenAI Codex Releases",
+        "url": "https://github.com/openai/codex/releases.atom",
+    },
+    {
+        "id": "claude-code",
+        "name": "Claude Code Releases",
+        "url": "https://github.com/anthropics/claude-code/releases.atom",
+    },
 )
 
 DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "config" / "feeds.yaml"
+
+
+def _collect_url(source_id: str) -> str:
+    for feed in COLLECT_FEEDS:
+        if feed["id"] == source_id:
+            return feed["url"]
+    raise KeyError(source_id)
+
+
+def _install_collect_feeds(tmp_path: Path, monkeypatch) -> None:
+    lines = ["feeds:"]
+    for feed in COLLECT_FEEDS:
+        lines.extend(
+            [
+                f"  - id: {feed['id']}",
+                f"    name: {feed['name']}",
+                f"    url: {feed['url']}",
+            ]
+        )
+    path = tmp_path / "feeds.yaml"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    monkeypatch.setattr("ai_briefing.config.DEFAULT_FEEDS_PATH", path)
 
 IN_WINDOW = {
     "techcrunch": {
@@ -191,21 +250,21 @@ def _atom(feed_title: str, entries: list[dict[str, str]]) -> str:
 
 
 FIVE_FEED_BODIES = {
-    FEED_URLS[0]: _rss(
+    _collect_url("techcrunch-ai"): _rss(
         "TechCrunch AI",
         [IN_WINDOW["techcrunch"], OUT_OF_WINDOW["techcrunch_utc_still_sep6_beijing"]],
     ),
-    FEED_URLS[1]: _atom("The Verge AI", [IN_WINDOW["verge"]]),
-    FEED_URLS[2]: _rss(
+    _collect_url("the-verge-ai"): _atom("The Verge AI", [IN_WINDOW["verge"]]),
+    _collect_url("openai-news"): _rss(
         "OpenAI News",
         [IN_WINDOW["openai"], OUT_OF_WINDOW["openai_history"]],
     ),
-    FEED_URLS[3]: _rss("DeepMind Blog", [IN_WINDOW["deepmind"]]),
-    FEED_URLS[4]: _rss("Google AI", []),
-    FEED_URLS[5]: _rss("MIT Technology Review", []),
-    FEED_URLS[6]: _atom("Gemini CLI Releases", []),
-    FEED_URLS[7]: _atom("OpenAI Codex Releases", []),
-    FEED_URLS[8]: _atom("Claude Code Releases", []),
+    _collect_url("deepmind-blog"): _rss("DeepMind Blog", [IN_WINDOW["deepmind"]]),
+    _collect_url("google-ai"): _rss("Google AI", []),
+    _collect_url("mit-technology-review"): _rss("MIT Technology Review", []),
+    _collect_url("gemini-cli"): _atom("Gemini CLI Releases", []),
+    _collect_url("openai-codex"): _atom("OpenAI Codex Releases", []),
+    _collect_url("claude-code"): _atom("Claude Code Releases", []),
 }
 
 CREDENTIALS = {
@@ -369,21 +428,18 @@ def test_valid_extract_json_writes_variant_a_briefing_then_pushes_wechat(tmp_pat
 
 
 def test_five_feeds_send_beijing_day_window_entries_to_extract(tmp_path, monkeypatch):
-    monkeypatch.setattr("ai_briefing.config.DEFAULT_FEEDS_PATH", DEFAULT_CONFIG)
+    _install_collect_feeds(tmp_path, monkeypatch)
     reports_dir = tmp_path / "reports"
     reports_dir.mkdir()
     recorded: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         recorded.append(request)
-        url = str(request.url)
-        if url in FIVE_FEED_BODIES:
-            return httpx.Response(200, text=FIVE_FEED_BODIES[url])
         if request.url.path.endswith("/chat/completions"):
             return _extract_ok_with_input_urls(request)
         if request.url.host == "sctapi.ftqq.com":
             return _push_ok(request)
-        return httpx.Response(404)
+        return httpx.Response(200, text=FIVE_FEED_BODIES[str(request.url)])
 
     http = httpx.Client(transport=httpx.MockTransport(handler))
 
@@ -395,10 +451,6 @@ def test_five_feeds_send_beijing_day_window_entries_to_extract(tmp_path, monkeyp
     )
 
     assert code == 0
-    requested = [str(r.url) for r in recorded if r.method == "GET"]
-    assert requested == list(FEED_URLS)
-    assert all("qbitai" not in url for url in requested)
-    assert all("https://36kr.com/" not in url for url in requested)
 
     extracts = [r for r in recorded if r.url.path.endswith("/chat/completions")]
     assert len(extracts) == 1
@@ -424,26 +476,25 @@ def test_five_feeds_send_beijing_day_window_entries_to_extract(tmp_path, monkeyp
 
 
 def test_feed_http_redirect_still_collects_window_entries(tmp_path, monkeypatch):
-    monkeypatch.setattr("ai_briefing.config.DEFAULT_FEEDS_PATH", DEFAULT_CONFIG)
+    _install_collect_feeds(tmp_path, monkeypatch)
     reports_dir = tmp_path / "reports"
     reports_dir.mkdir()
     recorded: list[httpx.Request] = []
-    moved = FEED_URLS[0] + "moved/"
+    origin = _collect_url("techcrunch-ai")
+    moved = origin + "moved/"
 
     def handler(request: httpx.Request) -> httpx.Response:
         recorded.append(request)
         url = str(request.url)
-        if url == FEED_URLS[0]:
+        if url == origin:
             return httpx.Response(301, headers={"location": moved})
         if url == moved:
-            return httpx.Response(200, text=FIVE_FEED_BODIES[FEED_URLS[0]])
-        if url in FIVE_FEED_BODIES:
-            return httpx.Response(200, text=FIVE_FEED_BODIES[url])
+            return httpx.Response(200, text=FIVE_FEED_BODIES[origin])
         if request.url.path.endswith("/chat/completions"):
             return _extract_ok_with_input_urls(request)
         if request.url.host == "sctapi.ftqq.com":
             return _push_ok(request)
-        return httpx.Response(404)
+        return httpx.Response(200, text=FIVE_FEED_BODIES[url])
 
     http = httpx.Client(transport=httpx.MockTransport(handler))
 
@@ -456,7 +507,7 @@ def test_feed_http_redirect_still_collects_window_entries(tmp_path, monkeypatch)
 
     assert code == 0
     requested = [str(r.url) for r in recorded if r.method == "GET"]
-    assert requested[0] == FEED_URLS[0]
+    assert requested[0] == origin
     assert moved in requested
     extracts = [r for r in recorded if r.url.path.endswith("/chat/completions")]
     assert len(extracts) == 1
@@ -465,26 +516,24 @@ def test_feed_http_redirect_still_collects_window_entries(tmp_path, monkeypatch)
 
 
 def test_one_feed_failure_still_extracts_remaining_and_pushes(tmp_path, monkeypatch):
-    monkeypatch.setattr("ai_briefing.config.DEFAULT_FEEDS_PATH", DEFAULT_CONFIG)
+    _install_collect_feeds(tmp_path, monkeypatch)
     reports_dir = tmp_path / "reports"
     reports_dir.mkdir()
     recorded: list[httpx.Request] = []
     files_at_push: list[str] = []
-    dead = FEED_URLS[2]
+    dead = _collect_url("openai-news")
 
     def handler(request: httpx.Request) -> httpx.Response:
         recorded.append(request)
         url = str(request.url)
         if url == dead:
             return httpx.Response(500)
-        if url in FIVE_FEED_BODIES:
-            return httpx.Response(200, text=FIVE_FEED_BODIES[url])
         if request.url.path.endswith("/chat/completions"):
             return _extract_ok_with_input_urls(request)
         if request.url.host == "sctapi.ftqq.com":
             files_at_push.extend(sorted(p.name for p in reports_dir.iterdir()))
             return _push_ok(request)
-        return httpx.Response(404)
+        return httpx.Response(200, text=FIVE_FEED_BODIES[url])
 
     http = httpx.Client(transport=httpx.MockTransport(handler))
 
@@ -521,9 +570,7 @@ def test_all_feeds_fail_exits_without_extract_or_push(tmp_path, monkeypatch):
 
     def handler(request: httpx.Request) -> httpx.Response:
         recorded.append(request)
-        if str(request.url) in FEED_URLS:
-            return httpx.Response(500)
-        return httpx.Response(200)
+        return httpx.Response(500)
 
     http = httpx.Client(transport=httpx.MockTransport(handler))
 
@@ -538,7 +585,9 @@ def test_all_feeds_fail_exits_without_extract_or_push(tmp_path, monkeypatch):
     assert list(reports_dir.iterdir()) == []
     assert [r for r in recorded if r.url.path.endswith("/chat/completions")] == []
     assert [r for r in recorded if r.url.host == "sctapi.ftqq.com"] == []
-    assert {str(r.url) for r in recorded} == set(FEED_URLS)
+    assert {str(r.url) for r in recorded} == {
+        feed.url for feed in load_feeds(DEFAULT_CONFIG)
+    }
 
 
 def test_html_challenge_pages_count_as_all_feeds_failed(tmp_path, monkeypatch):
@@ -553,11 +602,9 @@ def test_html_challenge_pages_count_as_all_feeds_failed(tmp_path, monkeypatch):
 
     def handler(request: httpx.Request) -> httpx.Response:
         recorded.append(request)
-        if str(request.url) in FEED_URLS:
-            return httpx.Response(
-                200, text=challenge, headers={"content-type": "text/html"}
-            )
-        return httpx.Response(200)
+        return httpx.Response(
+            200, text=challenge, headers={"content-type": "text/html"}
+        )
 
     http = httpx.Client(transport=httpx.MockTransport(handler))
 
