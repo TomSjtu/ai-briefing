@@ -467,6 +467,12 @@ def test_five_feeds_send_beijing_day_window_entries_to_extract(tmp_path, monkeyp
     assert user["items"][2]["source"] == "OpenAI News"
     assert user["items"][3]["source"] == "DeepMind Blog"
     assert all(item["published"] == "2026-09-07" for item in user["items"])
+    assert [item["item_time"] for item in user["items"]] == [
+        "2026-09-07T00:30:00+08:00",
+        "2026-09-07T16:00:00+08:00",
+        "2026-09-07T10:00:00+08:00",
+        "2026-09-07T11:00:00+08:00",
+    ]
     assert OUT_OF_WINDOW["openai_history"]["url"] not in {
         item["url"] for item in user["items"]
     }
